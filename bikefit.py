@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+from tkinter import Tk, filedialog
 from collections import deque
 import unicodedata
 from openpyxl import load_workbook
@@ -43,46 +44,8 @@ def draw_text_box(
     thickness=6,
     text_color=(255, 255, 255),
     box_color=(0, 0, 0),
-    alpha=0.93
-):
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    text = normalize_text(text)
-
-    (w, h), _ = cv2.getTextSize(text, font, font_scale, thickness)
-    x, y = pos
-    padding = 25
-
-    overlay = frame.copy()
-    cv2.rectangle(
-        overlay,
-        (x - padding, y - h - padding),
-        (x + w + padding, y + padding),
-        box_color,
-        -1
-    )
-    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
-
-    cv2.putText(
-        frame,
-        text,
-        (x, y),
-        font,
-        font_scale,
-        text_color,
-        thickness,
-        cv2.LINE_AA
-    )
-
-
-def draw_small_label(
-    frame,
-    text,
-    pos,
-    font_scale=1.15,
-    thickness=3,
-    text_color=(255, 255, 255),
-    box_color=(0, 0, 0),
-    alpha=0.85
+    alpha=0.30,
+    line_type=cv2.LINE_AA
 ):
     font = cv2.FONT_HERSHEY_SIMPLEX
     text = normalize_text(text)
@@ -109,7 +72,47 @@ def draw_small_label(
         font_scale,
         text_color,
         thickness,
-        cv2.LINE_AA
+        line_type
+    )
+
+
+def draw_small_label(
+    frame,
+    text,
+    pos,
+    font_scale=1.15,
+    thickness=3,
+    text_color=(255, 255, 255),
+    box_color=(0, 0, 0),
+    alpha=0.85,
+    line_type=cv2.LINE_AA
+):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text = normalize_text(text)
+
+    (w, h), _ = cv2.getTextSize(text, font, font_scale, thickness)
+    x, y = pos
+    padding = 6
+
+    overlay = frame.copy()
+    cv2.rectangle(
+        overlay,
+        (x - padding, y - h - padding),
+        (x + w + padding, y + padding),
+        box_color,
+        -1
+    )
+    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+
+    cv2.putText(
+        frame,
+        text,
+        (x, y),
+        font,
+        font_scale,
+        text_color,
+        thickness,
+        line_type
     )
 
 
@@ -121,11 +124,23 @@ mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
 
-def draw_one_side_no_face(frame, pose_landmarks, side="right", thickness=6, circle_radius=7):
+def draw_one_side_no_face(frame, pose_landmarks, side="right", thickness=3, circle_radius=4):
     PL = mp_pose.PoseLandmark
+    h, w = frame.shape[:2]
 
     if side.lower() == "right":
-        conn = [
+        pontos = [
+            PL.RIGHT_SHOULDER,
+            PL.RIGHT_ELBOW,
+            PL.RIGHT_WRIST,
+            PL.RIGHT_HIP,
+            PL.RIGHT_KNEE,
+            PL.RIGHT_ANKLE,
+            PL.RIGHT_HEEL,
+            PL.RIGHT_FOOT_INDEX
+        ]
+
+        conexoes = [
             (PL.RIGHT_SHOULDER, PL.RIGHT_ELBOW),
             (PL.RIGHT_ELBOW, PL.RIGHT_WRIST),
             (PL.RIGHT_SHOULDER, PL.RIGHT_HIP),
@@ -135,13 +150,19 @@ def draw_one_side_no_face(frame, pose_landmarks, side="right", thickness=6, circ
             (PL.RIGHT_HEEL, PL.RIGHT_FOOT_INDEX),
             (PL.RIGHT_ANKLE, PL.RIGHT_FOOT_INDEX),
         ]
-        keep_ids = {p.value for p in [
-            PL.RIGHT_SHOULDER, PL.RIGHT_ELBOW, PL.RIGHT_WRIST,
-            PL.RIGHT_HIP, PL.RIGHT_KNEE, PL.RIGHT_ANKLE,
-            PL.RIGHT_HEEL, PL.RIGHT_FOOT_INDEX
-        ]}
     else:
-        conn = [
+        pontos = [
+            PL.LEFT_SHOULDER,
+            PL.LEFT_ELBOW,
+            PL.LEFT_WRIST,
+            PL.LEFT_HIP,
+            PL.LEFT_KNEE,
+            PL.LEFT_ANKLE,
+            PL.LEFT_HEEL,
+            PL.LEFT_FOOT_INDEX
+        ]
+
+        conexoes = [
             (PL.LEFT_SHOULDER, PL.LEFT_ELBOW),
             (PL.LEFT_ELBOW, PL.LEFT_WRIST),
             (PL.LEFT_SHOULDER, PL.LEFT_HIP),
@@ -151,26 +172,23 @@ def draw_one_side_no_face(frame, pose_landmarks, side="right", thickness=6, circ
             (PL.LEFT_HEEL, PL.LEFT_FOOT_INDEX),
             (PL.LEFT_ANKLE, PL.LEFT_FOOT_INDEX),
         ]
-        keep_ids = {p.value for p in [
-            PL.LEFT_SHOULDER, PL.LEFT_ELBOW, PL.LEFT_WRIST,
-            PL.LEFT_HIP, PL.LEFT_KNEE, PL.LEFT_ANKLE,
-            PL.LEFT_HEEL, PL.LEFT_FOOT_INDEX
-        ]}
 
-    invisible = mp_drawing.DrawingSpec(thickness=0, circle_radius=0)
-    visible = mp_drawing.DrawingSpec(thickness=thickness, circle_radius=circle_radius)
+    lm = pose_landmarks.landmark
 
-    landmark_spec = {i: invisible for i in range(33)}
-    for i in keep_ids:
-        landmark_spec[i] = visible
+    for a, b in conexoes:
+        p1 = lm[a.value]
+        p2 = lm[b.value]
 
-    mp_drawing.draw_landmarks(
-        frame,
-        pose_landmarks,
-        connections=[(a.value, b.value) for a, b in conn],
-        landmark_drawing_spec=landmark_spec,
-        connection_drawing_spec=visible
-    )
+        x1, y1 = int(p1.x * w), int(p1.y * h)
+        x2, y2 = int(p2.x * w), int(p2.y * h)
+
+        cv2.line(frame, (x1, y1), (x2, y2), (255, 255, 255), thickness)
+
+    for p in pontos:
+        ponto = lm[p.value]
+        x, y = int(ponto.x * w), int(ponto.y * h)
+
+        cv2.circle(frame, (x, y), circle_radius, (255, 255, 255), -1)
 
 
 def angle_between_points(a, b, c):
@@ -703,6 +721,14 @@ def gerar_graficos(df, resumo_df, pasta_saida="graficos_bikefit"):
     print(f"Gráficos salvos na pasta: {pasta_saida}")
 
 
+def melhorar_qualidade_frame(frame):
+    frame = cv2.convertScaleAbs(frame, alpha=1.08, beta=4)
+
+    blur = cv2.GaussianBlur(frame, (0, 0), 1.0)
+    frame = cv2.addWeighted(frame, 1.08, blur, -0.08, 0)
+    return frame
+
+
 def run_bikefit(
     video_path="IMG_5683.mov",
     output_csv="bikefit_resultado_final.csv",
@@ -718,6 +744,47 @@ def run_bikefit(
     fps_video = cap.get(cv2.CAP_PROP_FPS)
     if fps_video <= 0:
         fps_video = 30.0
+
+    # =========================================
+    # AJUSTE AUTOMÁTICO DE ESCALA
+    # =========================================
+
+    video_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    video_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    escala_video = min(video_w / 1920, video_h / 1080)
+    if video_w < 1000:
+        escala_video *= 0.55
+
+    if video_w < 1000:
+        font_scale_main = 0.38
+        font_scale_small = 0.28
+
+        pos_x_texto = 12
+        pos_y_texto = 28
+        alpha_box = 0.72
+    else:
+        font_scale_main = 1.95
+        font_scale_small = 1.15
+
+        pos_x_texto = 25
+        pos_y_texto = 75
+        alpha_box = 0.93
+
+    espaco_texto = 18 if video_w < 1000 else max(32, int(70 * escala_video))
+
+    if video_w < 1000:
+        thickness_text = 1
+        thickness_small = 1
+    else:
+        thickness_text = max(1, int(4 * escala_video))
+        thickness_small = max(1, int(2 * escala_video))
+
+    # =========================================
+    # AJUSTE AUTOMÁTICO DE NITIDEZ DAS LETRAS
+    # =========================================
+
+    line_type_text = cv2.LINE_AA
 
     cv2.namedWindow(WIN_NAME, cv2.WINDOW_NORMAL)
 
@@ -745,6 +812,20 @@ def run_bikefit(
             if not ret:
                 break
 
+            # =========================================
+            # MELHORA DE RESOLUÇÃO PARA VÍDEOS PEQUENOS
+            # =========================================
+
+            if video_w < 1000:
+                frame = cv2.resize(
+                    frame,
+                    None,
+                    fx=1.8,
+                    fy=1.8,
+                    interpolation=cv2.INTER_CUBIC
+                )
+
+            frame = melhorar_qualidade_frame(frame)
             frame_idx += 1
             timestamp = frame_idx / fps_video
 
@@ -817,7 +898,13 @@ def run_bikefit(
                 guidao_status = guidao_db.update(classify_elbow(elbow_smooth))
                 pe_status = pe_db.update(classify_foot(ankle_smooth))
 
-                draw_one_side_no_face(frame, result.pose_landmarks, side=side, thickness=thickness, circle_radius=circle_radius)
+                draw_one_side_no_face(
+                    frame,
+                    result.pose_landmarks,
+                    side=side,
+                    thickness=thickness,
+                    circle_radius=circle_radius
+                )
 
                 msgs = format_live_msgs(
                     selim_status,
@@ -828,28 +915,85 @@ def run_bikefit(
                 )
 
                 for i, msg in enumerate(msgs):
-                    draw_text_box(frame, msg, pos=(25, 75 + i * 92), font_scale=1.95, thickness=6, alpha=0.93)
+                    draw_text_box(
+                        frame,
+                        msg,
+                        pos=(pos_x_texto, pos_y_texto + i * espaco_texto),
+                        font_scale=font_scale_main,
+                        thickness=thickness_text,
+                        alpha=alpha_box,
+                        line_type=line_type_text
+                    )
 
                 if not np.isnan(shoulder_smooth) and not np.isnan(sx) and not np.isnan(sy):
-                    draw_small_label(frame, label_deg(shoulder_smooth), pos=(int(sx) + 12, int(sy) - 12))
+                    draw_small_label(
+                        frame,
+                        label_deg(shoulder_smooth),
+                        pos=(int(sx) + 12, int(sy) - 12),
+                        font_scale=font_scale_small,
+                        thickness=thickness_small,
+                        line_type=line_type_text
+                    )
 
                 if not np.isnan(elbow_smooth) and not np.isnan(ex) and not np.isnan(ey):
-                    draw_small_label(frame, label_deg(elbow_smooth), pos=(int(ex) + 12, int(ey) - 12))
+                    draw_small_label(
+                        frame,
+                        label_deg(elbow_smooth),
+                        pos=(int(ex) + 12, int(ey) - 12),
+                        font_scale=font_scale_small,
+                        thickness=thickness_small,
+                        line_type=line_type_text
+                    )
 
                 if not np.isnan(hip_smooth) and not np.isnan(hxip) and not np.isnan(hyip):
-                    draw_small_label(frame, label_deg(hip_smooth), pos=(int(hxip) + 12, int(hyip) - 12))
+                    draw_small_label(
+                        frame,
+                        label_deg(hip_smooth),
+                        pos=(int(hxip) + 12, int(hyip) - 12),
+                        font_scale=font_scale_small,
+                        thickness=thickness_small,
+                        line_type=line_type_text
+                    )
 
                 if not np.isnan(knee) and not np.isnan(kx) and not np.isnan(ky):
-                    draw_small_label(frame, label_deg(knee), pos=(int(kx) + 12, int(ky) - 12))
+                    draw_small_label(
+                        frame,
+                        label_deg(knee),
+                        pos=(int(kx) + 12, int(ky) - 12),
+                        font_scale=font_scale_small,
+                        thickness=thickness_small,
+                        line_type=line_type_text
+                    )
 
                 if not np.isnan(ankle_smooth) and not np.isnan(ax) and not np.isnan(ay):
-                    draw_small_label(frame, label_deg(ankle_smooth), pos=(int(ax) + 12, int(ay) - 12))
+                    draw_small_label(
+                        frame,
+                        label_deg(ankle_smooth),
+                        pos=(int(ax) + 12, int(ay) - 12),
+                        font_scale=font_scale_small,
+                        thickness=thickness_small,
+                        line_type=line_type_text
+                    )
 
                 if not np.isnan(foot_incl_smooth) and not np.isnan(tx) and not np.isnan(ty):
-                    draw_small_label(frame, label_deg(foot_incl_smooth), pos=(int(tx) + 12, int(ty) + 12))
+                    draw_small_label(
+                        frame,
+                        label_deg(foot_incl_smooth),
+                        pos=(int(tx) + 12, int(ty) + 12),
+                        font_scale=font_scale_small,
+                        thickness=thickness_small,
+                        line_type=line_type_text
+                    )
 
                 if not np.isnan(trunk_smooth) and not np.isnan(hxip) and not np.isnan(hyip):
-                    draw_small_label(frame, f"T{label_deg(trunk_smooth)}", pos=(int(hxip) + 12, int(hyip) - 42))
+                    draw_small_label(
+                        frame,
+                        f"T{label_deg(trunk_smooth)}",
+                        pos=(int(hxip) + 12, int(hyip) - 42),
+                        font_scale=font_scale_small,
+                        thickness=thickness_small,
+                        line_type=line_type_text
+                    )
 
                 records.append({
                     "tempo_s": timestamp,
@@ -874,7 +1018,12 @@ def run_bikefit(
             frame_show = resize_with_letterbox(frame, w, h) if w > 0 and h > 0 else frame
             cv2.imshow(WIN_NAME, frame_show)
 
-            if cv2.waitKey(10) & 0xFF == ord("s"):
+            espera = 10
+
+            if video_w < 1000:
+                espera = 35
+
+            if cv2.waitKey(espera) & 0xFF == ord("s"):
                 break
 
     cap.release()
@@ -972,9 +1121,28 @@ def run_bikefit(
 
 
 if __name__ == "__main__":
-    run_bikefit(
-        video_path="IMG_5683.mov",
-        draw_side="right",
-        thickness=6,
-        circle_radius=7
+
+    # =========================================
+    # JANELA PARA SELECIONAR O VÍDEO
+    # =========================================
+
+    root = Tk()
+    root.withdraw()
+
+    video_escolhido = filedialog.askopenfilename(
+        title="Selecione o vídeo da análise",
+        filetypes=[
+            ("Vídeos", "*.mp4 *.mov *.avi *.mkv"),
+            ("Todos os arquivos", "*.*")
+        ]
     )
+
+    if not video_escolhido:
+        print("Nenhum vídeo selecionado.")
+    else:
+        run_bikefit(
+            video_path=video_escolhido,
+            draw_side="right",
+            thickness=2,
+            circle_radius=3
+        )
